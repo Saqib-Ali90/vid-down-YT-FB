@@ -14,7 +14,7 @@ A lightweight desktop GUI built with CustomTkinter and yt-dlp that lets you fetc
 
 1. Clone the repository:
    ```bash
-   git clone [https://github.com/YOUR_USERNAME/yt-fb-video-downloader.git](https://github.com/YOUR_USERNAME/yt-fb-video-downloader.git)
+   git clone [https://github.com/Saqib-Ali90/vid-down-YT-FB.git](https://github.com/Saqin-Ali90/vid-down-YT-FB.git)
    cd yt-fb-video-downloader
    ```
 

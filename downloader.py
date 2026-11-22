@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 import yt_dlp
+import re
 
 # Appearance settings
 ctk.set_appearance_mode("Dark")
@@ -249,7 +250,56 @@ class VideoDownloaderApp(ctk.CTk):
             "Fetch Error",
             f"Could not retrieve video details.\n\nDetails:\n{error_msg[:300]}",
         )
+    def clean_video_title(self, raw_title: str) -> str:
+        text = (raw_title or "video").splitlines()[0].strip()
 
+        # 1. Strip URLs and hashtags (#tag)
+        text = re.sub(
+            r"(?:https?://\S+|www\.\S+|youtu\.be/\S+)",
+            " ",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(r"#\S+", " ", text)
+
+        # 2. Split into segments by '|' or '·' or spaced dashes
+        segments = [s.strip() for s in re.split(r"\s*(?:\||·|\s[-–—]\s)\s*", text) if s.strip()]
+
+        stat_only = re.compile(
+            r"^(?:[\d.,]+\s*[KMBkmb]?\s*(?:views?|likes?|reactions?|comments?|shares?)(?:\s*(?:and|&|,|·|-|\|)?\s*)?)+$",
+            re.IGNORECASE,
+        )
+
+        cleaned_segments = []
+        for seg in segments:
+            # Remove leading stat prefixes inside a segment
+            seg_clean = re.sub(
+                r"^(?:[\d.,]+\s*[KMBkmb]?\s*(?:views?|likes?|reactions?|comments?|shares?)\s*(?:·|-|\|)?\s*)+",
+                "",
+                seg,
+                flags=re.IGNORECASE,
+            ).strip()
+            if seg_clean and not stat_only.match(seg_clean):
+                cleaned_segments.append(seg_clean)
+
+        # 3. Pick the best segment: if there are multiple, prefer a short/medium title segment
+        # over a long paragraph-like description
+        if cleaned_segments:
+            short_or_medium = [s for s in cleaned_segments if 3 <= len(s) <= 75]
+            if short_or_medium:
+                chosen = short_or_medium[0]
+            else:
+                chosen = cleaned_segments[0]
+        else:
+            chosen = text
+
+        # 4. Sanitize Windows-illegal filename characters & collapse spaces
+        chosen = re.sub(r'[\\/:*?"<>|]+', " ", chosen)
+        chosen = re.sub(r"\s+", " ", chosen).strip(" .-_")
+
+        # 5. Cap final filename length cleanly
+        return chosen[:65].strip() if chosen else "video"
+    
     def start_download_thread(self):
         url = self.url_entry.get().strip()
         selected_label = self.quality_dropdown.get()
@@ -294,11 +344,13 @@ class VideoDownloaderApp(ctk.CTk):
             )
 
     def download_video(self, url, format_selector, is_audio_only):
-        output_template = os.path.join(self.download_folder, "%(title)s.%(ext)s")
+        safe_title = self.clean_video_title(self.video_title)
+        output_template = os.path.join(self.download_folder, f"{safe_title}.%(ext)s")
 
         ydl_opts = {
             "format": format_selector,
-            "outtmpl": output_template,
+            "outtmpl": {"default": output_template},
+            "windowsfilenames": True,
             "progress_hooks": [self.progress_hook],
             "noplaylist": True,
             "quiet": True,
